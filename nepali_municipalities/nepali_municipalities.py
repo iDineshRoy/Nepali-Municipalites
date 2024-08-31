@@ -1,47 +1,42 @@
 import json
 import os
+from typing import Dict
 
 
 class DistrictNotFoundException(Exception):
-    """
-    Exception to be raised if correct district is not provided by user
-    """
+    """Exception to be raised if correct district is not provided by user"""
+
     pass
 
 
 class DistrictNotProvidedException(Exception):
-    """
-    Exception to be raised if  district is not provided by user
-    """
-    # pass
+    """Exception to be raised if district is not provided by user"""
+
+    pass
 
 
-class MunicipalitiesNotException(Exception):
-    """
-    Exception to be raised if  municipalities is not correct
-    """
-    # pass
+class MunicipalityNotFoundException(Exception):
+    """Exception to be raised if municipality is not found"""
+
+    pass
 
 
 class NepalMunicipality:
-    def __init__(self, district_name=None):
-        self.municipality_name = None
-        self._all_data = []
-        self._district_name = district_name
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        json_data_path = os.path.join(BASE_DIR, 'data', 'data.json')
-        f = open(json_data_path, 'r')
-        self._data = json.loads(f.read())
-        self._district = []
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_PATH = os.path.join(BASE_DIR, "data", "data.json")
+    ALL_MUNICIPALITIES_PATH = os.path.join(
+        BASE_DIR, "data", "all_nepali_municipalities.json"
+    )
 
-    def all_districts(self):
-        """
-        Use this method to get a list of all districts of nepal
-        """
-        for items in self._data:
-            for item in items.keys():
-                self._district.append(item)
-        return self._district
+    def __init__(self, district_name: str = None):
+        self.municipality_name = None
+        self._district_name = district_name
+        self._data = self._load_json(self.DATA_PATH)
+
+    @staticmethod
+    def _load_json(file_path: str) -> list[Dict]:
+        with open(file_path, "r") as f:
+            return json.load(f)
 
     def all_municipalities(self):
         """
@@ -54,29 +49,93 @@ class NepalMunicipality:
                     if items.get(self._district_name) is not None:
                         return items.get(self._district_name)
                 else:
-                    raise DistrictNotFoundException('District not found for following text, please check '
-                                                    'district spelling.')
-        raise DistrictNotProvidedException('District not provided please provide district name.')
+                    raise DistrictNotFoundException(
+                        "District not found for following text, please check "
+                        "district spelling."
+                    )
+        raise DistrictNotProvidedException(
+            "District not provided please provide district name."
+        )
 
-    def all_data_info(self, municipality_name):
+    @classmethod
+    def municipalities(cls, district_name: str = None):
         """
-        Use this to get list of all municipalities of specific district
-        provided from class instance if district is none You will get None as return Value
+        Use this method to get a list of all municipalities in a specific district.
+        :param district_name: The name of the district. If None, use the instance's district name.
+        :return: A list of municipalities in the specified district.
         """
-        self.municipality_name = municipality_name
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        json_data_path = os.path.join(BASE_DIR, 'data', 'all_nepali_municipalities.json')
-        f = open(json_data_path, 'r')
-        self._data = json.loads(f.read())
-        self._all_data = []
-        for item in self._data:
-            if item['name'] == self.municipality_name:
-                self._all_data.append(item)
-        if len(self._all_data) == 0:
-            raise MunicipalitiesNotException("No matching info for provided municipalities try changing spelling or "
-                                             "try another name.")
-        else:
-            return self._all_data
+        # Check if this is an instance method call
+        if not isinstance(cls, type):
+            # This is an instance method call
+            district_name = district_name or cls._district_name
+
+        # If district_name is still None, raise the exception
+        if district_name is None:
+            raise DistrictNotProvidedException(
+                "District not provided. Please provide a district name."
+            )
+
+        data = cls._load_json(cls.DATA_PATH)
+        districts = cls.all_districts()
+
+        if district_name not in districts:
+            raise DistrictNotFoundException(
+                f"District '{district_name}' not found. Please check the spelling."
+            )
+
+        for item in data:
+            if district_name in item:
+                return item[district_name]
+
+        raise DistrictNotFoundException(
+            f"Municipalities for district '{district_name}' could not be found."
+        )
+
+    @classmethod
+    def all_districts(cls, province_name: str = None) -> list[str]:
+        """Use this method to get a list of all districts of Nepal."""
+        data = cls._load_json(cls.DATA_PATH)
+        muni_data = cls._load_json(cls.ALL_MUNICIPALITIES_PATH)
+        all_districts: list = [list(item.keys())[0] for item in data]
+        if province_name:
+            filtered_entries = [e for e in muni_data if e["province"] == province_name]
+            all_districts = list(set([entry["district"] for entry in filtered_entries]))
+        return all_districts
+
+    @classmethod
+    def all_data_info(cls, municipality_name: str = None) -> Dict[str, str]:
+        """
+        Use this method to get the details of a specific municipality, such as its district, province, and province number.
+        :param municipality_name: The name of the municipality.
+        :return: A dictionary with details about the municipality.
+        """
+        data = cls._load_json(cls.ALL_MUNICIPALITIES_PATH)
+
+        province_mapping = {
+            "Koshi": "Province 1",
+            "Madhesh": "Province 2",
+            "Bagmati": "Province 3",
+            "Gandaki": "Province 4",
+            "Lumbini": "Province 5",
+            "Karnali": "Province 6",
+            "Sudurpashchim": "Province 7",
+        }
+
+        for item in data:
+            if item["name"].lower() == municipality_name.lower():
+                return {
+                    "municipality": item["name"],
+                    "district": item["district"],
+                    "province": item["province"],
+                    "province_no": province_mapping.get(item["province"], "Unknown"),
+                    "country": item["country"],
+                }
+
+        raise MunicipalityNotFoundException(
+            f"No matching info for provided municipality '{municipality_name}'. "
+            "Please check the spelling or try another name."
+        )
 
 
-print(NepalMunicipality().all_data_info("Kathmandu"))
+if __name__ == "__main__":
+    print(NepalMunicipality.all_data_info("Kathmandu"))
